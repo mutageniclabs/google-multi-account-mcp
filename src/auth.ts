@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import { execFileSync } from "node:child_process";
 import { OAuth2Client, type Credentials } from "google-auth-library";
 import {
   type Account,
@@ -10,7 +11,15 @@ import {
 
 const clients = new Map<string, OAuth2Client>();
 
-export function readToken(email: string): Credentials | null {
+// On macOS tokens live in the login Keychain; elsewhere in 0600 files under TOKENS_DIR.
+const USE_KEYCHAIN = process.platform === "darwin" && process.env.GMX_TOKEN_STORE !== "file";
+const KEYCHAIN_SERVICE = "google-multi-mcp";
+
+function security(args: string[], input?: string): string {
+  return execFileSync("/usr/bin/security", args, { input, encoding: "utf8", stdio: ["pipe", "pipe", "ignore"] });
+}
+
+function readFileToken(email: string): Credentials | null {
   try {
     return JSON.parse(fs.readFileSync(tokenPath(email), "utf8")) as Credentials;
   } catch {
@@ -18,9 +27,47 @@ export function readToken(email: string): Credentials | null {
   }
 }
 
+export function readToken(email: string): Credentials | null {
+  const key = email.toLowerCase();
+  if (!USE_KEYCHAIN) return readFileToken(key);
+  try {
+    return JSON.parse(security(["find-generic-password", "-s", KEYCHAIN_SERVICE, "-a", key, "-w"])) as Credentials;
+  } catch {
+    // Not in the Keychain yet: migrate a token file left by an older version.
+    const legacy = readFileToken(key);
+    if (legacy) {
+      writeToken(key, legacy);
+      fs.rmSync(tokenPath(key), { force: true });
+    }
+    return legacy;
+  }
+}
+
 export function writeToken(email: string, creds: Credentials): void {
-  ensureDirs();
-  fs.writeFileSync(tokenPath(email), JSON.stringify(creds, null, 2), { mode: 0o600 });
+  const key = email.toLowerCase();
+  if (!USE_KEYCHAIN) {
+    ensureDirs();
+    fs.writeFileSync(tokenPath(key), JSON.stringify(creds, null, 2), { mode: 0o600 });
+    return;
+  }
+  // Fed through `security -i` on stdin, hex-encoded, so the secret never appears in argv / `ps`.
+  const hex = Buffer.from(JSON.stringify(creds), "utf8").toString("hex");
+  security(["-i"], `add-generic-password -U -s ${KEYCHAIN_SERVICE} -a ${key} -l "Google Multi-Account MCP (${key})" -X ${hex}\n`);
+  if (readToken(key)?.refresh_token !== creds.refresh_token) {
+    throw new Error(`Could not save the login for ${key} to the macOS Keychain.`);
+  }
+}
+
+export function deleteToken(email: string): void {
+  const key = email.toLowerCase();
+  fs.rmSync(tokenPath(key), { force: true });
+  if (USE_KEYCHAIN) {
+    try {
+      security(["delete-generic-password", "-s", KEYCHAIN_SERVICE, "-a", key]);
+    } catch {
+      // already gone
+    }
+  }
 }
 
 /** Authorized OAuth client for one account; refreshed tokens are persisted automatically. */

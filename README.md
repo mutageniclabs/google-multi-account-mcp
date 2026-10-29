@@ -21,10 +21,10 @@ Claude desktop app ──stdio──▶ dist/index.js ──▶ one OAuth2 clien
                   ~/.config/google-multi-mcp/
                     client_secret.json      (your Google Cloud "Desktop app" OAuth client)
                     accounts.json           (email + alias registry)
-                    tokens/<email>.token.json   (refresh tokens, chmod 600)
+                    (tokens: macOS Keychain, or tokens/<email>.token.json elsewhere)
 ```
 
-Everything runs on your Mac. Tokens never leave it. Access tokens refresh automatically and are saved back to disk.
+Everything runs on your Mac. Tokens never leave it; they live in the macOS Keychain. Access tokens refresh automatically and are saved back to disk.
 
 **Scopes requested:** `gmail.modify` (read, send, label and trash mail, but never delete it permanently), `calendar` (read and write), `drive.readonly` (read all files), `drive.file` (write only files this app creates), and `openid email`.
 
@@ -106,6 +106,7 @@ After you add or remove an account, restart Claude (or toggle the connector) so 
 | `GMX_CONFIG_DIR` | `~/.config/google-multi-mcp` |
 | `GMX_CLIENT_SECRET` | `$GMX_CONFIG_DIR/client_secret.json` |
 | `GMX_TIMEZONE` | system zone (installer sets it) |
+| `GMX_TOKEN_STORE` | `keychain` on macOS; set `file` to use 0600 token files instead |
 
 ## Troubleshooting
 - **"Login … expired or was revoked"**: run `add-account` again with the same alias. If it happens weekly, the app is still in *Testing* (see step 1.3).
@@ -116,7 +117,7 @@ After you add or remove an account, restart Claude (or toggle the connector) so 
 
 ## Security
 - Runs locally over stdio; nothing is hosted and tokens never leave your machine.
-- Refresh tokens are stored as `chmod 600` JSON under `~/.config/google-multi-mcp/tokens/`. Moving them to the macOS Keychain is planned.
+- On macOS, tokens are stored in your login Keychain (service `google-multi-mcp`, one item per account) and are passed to `security` over stdin, never on the command line. Token files from older versions are moved into the Keychain automatically on first use. On other platforms, or with `GMX_TOKEN_STORE=file`, they are `chmod 600` JSON files under `~/.config/google-multi-mcp/tokens/`.
 - `gmail.modify` cannot permanently delete mail; Drive writes are limited to files this app created.
 - Write tools (send, draft, create/update/delete event, RSVP, create file) require an explicit `account`.
 

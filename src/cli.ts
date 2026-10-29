@@ -15,9 +15,9 @@ import { gmail } from "@googleapis/gmail";
 import { calendar } from "@googleapis/calendar";
 import { drive } from "@googleapis/drive";
 import {
-  CLIENT_SECRET_PATH, CONFIG_DIR, SCOPES, loadAccounts, loadClientSecret, saveAccounts, tokenPath, ensureDirs,
+  CLIENT_SECRET_PATH, CONFIG_DIR, SCOPES, loadAccounts, loadClientSecret, saveAccounts, ensureDirs,
 } from "./config.js";
-import { getClient, readToken, resolveAccounts, writeToken, explainError, label } from "./auth.js";
+import { getClient, readToken, resolveAccounts, writeToken, deleteToken, explainError, label } from "./auth.js";
 
 const [, , cmd, ...rest] = process.argv;
 const flag = (name: string) => {
@@ -117,7 +117,7 @@ async function remove(): Promise<void> {
     const { clientId, clientSecret } = loadClientSecret();
     await new OAuth2Client({ clientId, clientSecret }).revokeToken(t.refresh_token).catch(() => {});
   }
-  fs.rmSync(tokenPath(a.email), { force: true });
+  deleteToken(a.email);
   saveAccounts(loadAccounts().filter((x) => x.email !== a.email));
   console.log(`Removed ${label(a)} and revoked its access.`);
 }
