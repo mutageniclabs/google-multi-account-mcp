@@ -1,0 +1,49 @@
+{
+  "name": "google-multi-account-mcp",
+  "version": "0.1.0",
+  "description": "Local MCP server exposing Gmail, Calendar and Drive across multiple Google accounts at once",
+  "license": "MIT",
+  "author": "Mutagenic Labs (https://mutagenic.io)",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mutageniclabs/google-multi-account-mcp.git"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "claude",
+    "gmail",
+    "google-calendar",
+    "google-drive",
+    "multi-account"
+  ],
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "gmx-accounts": "dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "add-account": "node dist/cli.js add",
+    "accounts": "node dist/cli.js list",
+    "remove-account": "node dist/cli.js remove",
+    "check": "node dist/cli.js check",
+    "install-claude": "node scripts/install-claude-config.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@googleapis/calendar": "^20.0.0",
+    "@googleapis/drive": "^26.0.0",
+    "@googleapis/gmail": "^22.0.0",
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "google-auth-library": "^11.1.0",
+    "zod": "^3.25.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.6.0"
+  }
+}

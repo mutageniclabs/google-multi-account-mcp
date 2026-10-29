@@ -1,0 +1,11 @@
+node_modules/
+dist/
+*.token.json
+client_secret*.json
+
+# Private working notes (kept locally, not published)
+CLAUDE.md
+build_log.md
+dev_plan.md
+roadmap.md
+project_memory/
