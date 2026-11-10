@@ -9,7 +9,7 @@ A local MCP server for Claude (Cowork and desktop chat) that holds **several Goo
 | Area | Tools |
 |---|---|
 | Accounts | `google_list_accounts` |
-| Gmail | `gmail_search` (all accounts, merged by date), `gmail_read_message`, `gmail_read_thread`, `gmail_create_draft`, `gmail_send` (new or threaded reply, reply-all, local attachments), `gmail_list_drafts`, `gmail_send_draft`, `gmail_modify` (archive / read / star / trash / labels), `gmail_list_labels`, `gmail_save_attachment` |
+| Gmail | `gmail_search` (all accounts, merged by date), `gmail_read_message`, `gmail_read_thread`, `gmail_create_draft`, `gmail_send` (new or threaded reply, reply-all, local attachments, verified send-as alias via `from`), `gmail_list_drafts`, `gmail_send_draft`, `gmail_modify` (archive / read / star / trash / labels), `gmail_list_labels`, `gmail_save_attachment` |
 | Calendar | `calendar_list_events` (unified agenda, removes duplicate meetings), `calendar_find_free_time` (busy time from **every** account combined), `calendar_list_calendars`, `calendar_get_event`, `calendar_create_event` (optional Meet link), `calendar_update_event`, `calendar_delete_event`, `calendar_respond` |
 | Drive | `drive_search` (all accounts), `drive_read_file` (Docs→Markdown, Sheets→CSV, Slides→text), `drive_download_file` (→ .docx/.xlsx/.pptx/.pdf), `drive_create_file` |
 

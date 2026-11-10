@@ -125,6 +125,11 @@ async function buildRaw(opts: {
 
 const composeShape = {
   account: z.string().describe(accountParam + " The message is sent from this account."),
+  from: z.string().optional().describe(
+    "Send as this address instead of the account's own. Must be a verified alias under that account's Gmail settings " +
+      "(Accounts > Send mail as), e.g. a custom-domain address. When replying and this is omitted, the alias the original " +
+      "message was addressed to is used automatically.",
+  ),
   to: z.string().optional().describe("Comma-separated recipients. Optional when replying (defaults to the original sender)."),
   cc: z.string().optional(),
   bcc: z.string().optional(),
@@ -135,13 +140,47 @@ const composeShape = {
   attachments: z.array(z.string()).optional().describe("Absolute paths of local files on this Mac to attach."),
 };
 type ComposeArgs = {
-  account: string; to?: string; cc?: string; bcc?: string; subject?: string; body: string;
+  account: string; from?: string; to?: string; cc?: string; bcc?: string; subject?: string; body: string;
   reply_to_message_id?: string; reply_all: boolean; attachments?: string[];
 };
+
+/** Verified send-as addresses on the account, primary included. Gmail rejects or rewrites any other From. */
+async function sendAsAliases(g: gmail_v1.Gmail): Promise<{ email: string; name: string; primary: boolean }[]> {
+  const r = await g.users.settings.sendAs.list({ userId: "me" });
+  return (r.data.sendAs ?? [])
+    .filter((x) => x.sendAsEmail && (x.isPrimary || x.verificationStatus === "accepted"))
+    .map((x) => ({ email: x.sendAsEmail!, name: x.displayName ?? "", primary: !!x.isPrimary }));
+}
+
+function fromHeader(x: { email: string; name: string }): string {
+  return x.name ? `${encodeHeader(x.name)} <${x.email}>` : x.email;
+}
 
 async function prepareCompose(args: ComposeArgs) {
   const a = one(args.account);
   const g = api(a);
+  let from = a.email;
+  let fromEmail = a.email;
+  let aliases: Awaited<ReturnType<typeof sendAsAliases>> = [];
+  if (args.from || args.reply_to_message_id) {
+    try {
+      aliases = await sendAsAliases(g);
+    } catch (e) {
+      // an explicit alias we can't verify must not go out under the wrong address; a reply just falls back to the account
+      if (args.from) throw new Error(`Could not read send-as aliases for ${a.email}: ${(e as Error).message}`);
+    }
+  }
+  if (args.from) {
+    const want = args.from.trim().toLowerCase();
+    const hit = aliases.find((x) => x.email.toLowerCase() === want);
+    if (!hit) {
+      throw new Error(
+        `${args.from} is not a verified send-as alias on ${a.email}. Available: ${aliases.map((x) => x.email).join(", ") || "none"}.`,
+      );
+    }
+    from = fromHeader(hit);
+    fromEmail = hit.email;
+  }
   let { to, cc, subject } = args;
   let threadId: string | undefined;
   let inReplyTo: string | undefined;
@@ -160,22 +199,31 @@ async function prepareCompose(args: ComposeArgs) {
     const origSubject = hdr(h, "Subject");
     subject ??= /^re:/i.test(origSubject) ? origSubject : `Re: ${origSubject}`;
     to ??= hdr(h, "Reply-To") || hdr(h, "From");
+    if (!args.from) {
+      // reply from the address the message was sent to, so the thread keeps one identity
+      const addressed = `${hdr(h, "To")},${hdr(h, "Cc")}`.toLowerCase();
+      const hit = aliases.find((x) => !x.primary && addressed.includes(x.email.toLowerCase()));
+      if (hit) {
+        from = fromHeader(hit);
+        fromEmail = hit.email;
+      }
+    }
     if (args.reply_all) {
-      const self = a.email.toLowerCase();
+      const selves = [a.email.toLowerCase(), fromEmail.toLowerCase()];
       const others = [hdr(h, "To"), hdr(h, "Cc")]
         .join(",")
         .split(",")
         .map((s) => s.trim())
-        .filter((s) => s && !s.toLowerCase().includes(self));
+        .filter((s) => s && !selves.some((self) => s.toLowerCase().includes(self)));
       cc = [cc, ...others].filter(Boolean).join(", ");
     }
   }
   if (!to) throw new Error("`to` is required unless reply_to_message_id is given.");
   const raw = await buildRaw({
-    from: a.email, to, cc, bcc: args.bcc, subject: subject ?? "", body: args.body,
+    from, to, cc, bcc: args.bcc, subject: subject ?? "", body: args.body,
     inReplyTo, references, attachments: args.attachments,
   });
-  return { a, g, raw, threadId, to, subject };
+  return { a, g, raw, threadId, to, subject, fromEmail };
 }
 
 export function registerGmail(server: McpServer): void {
@@ -277,9 +325,9 @@ export function registerGmail(server: McpServer): void {
       annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
     },
     safe(async (args: ComposeArgs) => {
-      const { a, g, raw, threadId, to, subject } = await prepareCompose(args);
+      const { a, g, raw, threadId, to, subject, fromEmail } = await prepareCompose(args);
       const d = await g.users.drafts.create({ userId: "me", requestBody: { message: { raw, threadId } } });
-      return text(`Draft created in ${label(a)} — To: ${to} | Subject: ${subject}\ndraft_id=${d.data.id} message_id=${d.data.message?.id}`);
+      return text(`Draft created in ${label(a)} — From: ${fromEmail} | To: ${to} | Subject: ${subject}\ndraft_id=${d.data.id} message_id=${d.data.message?.id}`);
     }),
   );
 
@@ -293,9 +341,9 @@ export function registerGmail(server: McpServer): void {
       annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
     },
     safe(async (args: ComposeArgs) => {
-      const { a, g, raw, threadId, to, subject } = await prepareCompose(args);
+      const { a, g, raw, threadId, to, subject, fromEmail } = await prepareCompose(args);
       const s = await g.users.messages.send({ userId: "me", requestBody: { raw, threadId } });
-      return text(`Sent from ${label(a)} — To: ${to} | Subject: ${subject}\nmessage_id=${s.data.id} thread=${s.data.threadId}`);
+      return text(`Sent from ${label(a)} — From: ${fromEmail} | To: ${to} | Subject: ${subject}\nmessage_id=${s.data.id} thread=${s.data.threadId}`);
     }),
   );
 
