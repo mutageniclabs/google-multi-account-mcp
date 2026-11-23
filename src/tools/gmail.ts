@@ -113,8 +113,10 @@ async function buildRaw(opts: {
       if (!fs.existsSync(full)) throw new Error(`Attachment not found: ${full}`);
       const name = path.basename(full);
       const data = fs.readFileSync(full).toString("base64").replace(/.{76}/g, "$&\r\n");
+      // .ics as text/calendar so Gmail/Outlook render it as an invite (Accept/Decline), e.g. invites sent from a send-as alias
+      const type = /\.ics$/i.test(name) ? "text/calendar; charset=UTF-8; method=REQUEST" : "application/octet-stream";
       parts.push(
-        `--${boundary}\r\nContent-Type: application/octet-stream; name="${encodeHeader(name)}"\r\n` +
+        `--${boundary}\r\nContent-Type: ${type}; name="${encodeHeader(name)}"\r\n` +
           `Content-Disposition: attachment; filename="${encodeHeader(name)}"\r\nContent-Transfer-Encoding: base64\r\n\r\n${data}`,
       );
     }
