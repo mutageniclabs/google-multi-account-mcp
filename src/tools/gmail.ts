@@ -15,6 +15,7 @@ import {
   htmlToText,
   safe,
   text,
+  textToHtml,
   truncate,
 } from "../util.js";
 
@@ -99,15 +100,19 @@ async function buildRaw(opts: {
     "MIME-Version: 1.0",
   ].filter(Boolean);
 
-  const bodyB64 = Buffer.from(opts.body, "utf8").toString("base64").replace(/.{76}/g, "$&\r\n");
+  const b64 = (s: string) => Buffer.from(s, "utf8").toString("base64").replace(/.{76}/g, "$&\r\n");
+  const alt = `alt_${Date.now().toString(36)}`;
+  const altType = `Content-Type: multipart/alternative; boundary="${alt}"`;
+  const altBody =
+    ["plain", "html"]
+      .map((t) => `--${alt}\r\nContent-Type: text/${t}; charset=UTF-8\r\nContent-Transfer-Encoding: base64\r\n\r\n${b64(t === "html" ? textToHtml(opts.body) : opts.body)}`)
+      .join("\r\n") + `\r\n--${alt}--`;
   let mime: string;
   if (!opts.attachments?.length) {
-    mime = [...headers, "Content-Type: text/plain; charset=UTF-8", "Content-Transfer-Encoding: base64", "", bodyB64].join("\r\n");
+    mime = [...headers, altType, "", altBody].join("\r\n");
   } else {
     const boundary = `gmx_${Date.now().toString(36)}`;
-    const parts = [
-      `--${boundary}\r\nContent-Type: text/plain; charset=UTF-8\r\nContent-Transfer-Encoding: base64\r\n\r\n${bodyB64}`,
-    ];
+    const parts = [`--${boundary}\r\n${altType}\r\n\r\n${altBody}`];
     for (const p of opts.attachments) {
       const full = p.startsWith("~") ? path.join(os.homedir(), p.slice(1)) : p;
       if (!fs.existsSync(full)) throw new Error(`Attachment not found: ${full}`);

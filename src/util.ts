@@ -48,6 +48,19 @@ export function b64urlEncode(buf: Buffer | string): string {
   return Buffer.from(buf).toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
+// Plain text as HTML, so Gmail opens a draft as rich text. A text/plain-only draft sent from the Gmail UI is hard-wrapped at ~72 characters.
+// shortcut: leading and repeated spaces collapse in the HTML part; upgrade if indented text ever matters.
+export function textToHtml(body: string): string {
+  const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  const lines = body.replace(/\r\n?/g, "\n").split("\n").map((line) =>
+    line
+      .split(/(https?:\/\/[^\s<>"]+[^\s<>".,;:!?)\]'])/)
+      .map((s, i) => (i % 2 ? `<a href="${esc(s)}">${esc(s)}</a>` : esc(s)))
+      .join(""),
+  );
+  return `<div dir="ltr">${lines.join("<br>")}</div>`;
+}
+
 export function htmlToText(html: string): string {
   return html
     .replace(/<(script|style)[\s\S]*?<\/\1>/gi, "")
