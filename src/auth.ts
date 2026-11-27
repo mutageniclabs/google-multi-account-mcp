@@ -136,6 +136,8 @@ export function explainError(err: unknown, account?: Account): string {
   const msg: string = e.response?.data?.error?.message ?? e.response?.data?.error_description ?? e.message ?? String(err);
   const who = account ? label(account) : "this account";
   if (/invalid_grant|Token has been expired or revoked/i.test(msg) || status === 401) {
+    // Drop the cached client so the next call re-reads the Keychain and picks up a fresh sign-in without a restart.
+    if (account) dropClient(account.email);
     return `Login for ${who} has expired or was revoked. Re-run \`npm run add-account -- --alias ${account?.alias ?? "<name>"}\` and sign in as ${account?.email ?? "that account"}. (If this happens every ~7 days, set the OAuth consent screen's publishing status to "In production".)`;
   }
   if (status === 403 && /insufficient|scope/i.test(msg)) {
